@@ -1,0 +1,12 @@
+# python
+__pycache__/
+*.pyc
+
+# rigging intermediates
+*_rig.png
+*.npy
+*.npz
+
+# os
+.DS_Store
+Thumbs.db

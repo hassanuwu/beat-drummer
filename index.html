@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Table Drummer</title>
+<meta name="description" content="Drop in a song and a hand taps it out on the table — each frequency band drives a different finger.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="bar">
+    <div class="brand">
+      <span class="led idle" id="led"></span>
+      <h1>Table Drummer</h1>
+    </div>
+    <div class="readouts">
+      <div class="ro"><b id="roBpm">—</b><span>BPM</span></div>
+      <div class="ro"><b id="roHits">—</b><span>Taps found</span></div>
+      <div class="ro"><b id="roSrc" style="font-size:13px">Demo loop</b><span>Source</span></div>
+    </div>
+  </header>
+
+  <section class="stage" id="stage">
+    <video class="bgvid" id="vid" playsinline preload="metadata"></video>
+    <div class="scrim"></div>
+    <canvas id="highway" class="lyr"></canvas>
+    <div class="handwrap lyr">
+      <canvas id="gl" aria-label="A 3D hand resting on a table, tapping along to the beat"></canvas>
+    </div>
+    <div class="booting" id="booting">Loading the hand…</div>
+    <div class="status lyr" id="status">Demo loop loaded — press Play</div>
+  </section>
+
+  <div class="camrow">
+    <span class="cap">View</span>
+    <div class="segmented" id="camPresets" role="group" aria-label="Camera angle">
+      <button data-cam="three" aria-pressed="true">Three-quarter</button>
+      <button data-cam="side" aria-pressed="false">Side</button>
+      <button data-cam="top" aria-pressed="false">Top</button>
+      <button data-cam="front" aria-pressed="false">Front</button>
+    </div>
+    <span class="cap" style="margin-left:4px">Hand</span>
+    <div class="segmented" id="handPick" role="group" aria-label="Hand model">
+      <button data-hand="mummy" aria-pressed="true">Mummy</button>
+      <button data-hand="cyborg" aria-pressed="false">Cyborg</button>
+    </div>
+    <span class="hint">Drag the hand to orbit, scroll or pinch to zoom. Arrow keys work once it has focus.</span>
+  </div>
+
+  <div class="pads" id="pads"></div>
+
+  <div class="transport">
+    <button class="ctl primary" id="btnPlay">Play</button>
+    <button class="ctl" id="btnStop">Restart</button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="track"><div class="fill" id="fill"></div></div>
+    </div>
+    <span class="clock" id="clock">0:00 / 0:00</span>
+  </div>
+
+  <div class="controls">
+    <div class="field">
+      <label class="cap" for="file">Load a song or video (stays on your device)</label>
+      <input type="file" id="file" accept="audio/*,video/*">
+      <button class="ctl" id="btnDemo" style="align-self:flex-start">Back to demo loop</button>
+      <span class="hint">MP3, WAV, M4A, OGG — or an MP4, MOV or WebM, which plays behind the hand while its own soundtrack drives the fingers. Nothing is uploaded; it's decoded and analysed right here in the browser.</span>
+    </div>
+    <div class="field">
+      <label class="cap" for="sens">Onset sensitivity — <span id="sensVal" style="font-family:var(--mono);color:var(--accent)">1.60</span></label>
+      <input type="range" id="sens" min="1.1" max="2.8" step="0.05" value="1.6">
+      <label class="cap" style="margin-top:4px">Mode</label>
+      <div class="segmented" role="group" aria-label="Mode">
+        <button id="mWatch" aria-pressed="true">Watch</button>
+        <button id="mPlay" aria-pressed="false">Play</button>
+      </div>
+      <span class="hint" id="modeHint">The hand taps the beat for you. Switch to Play and tap it yourself with A S D F G.</span>
+    </div>
+    <div class="field">
+      <label class="cap" for="wn">Finger stiffness — <span id="wnVal" style="font-family:var(--mono);color:var(--accent)">4.3 Hz</span></label>
+      <input type="range" id="wn" min="12" max="48" step="0.5" value="27">
+      <label class="cap" for="zeta">Damping ratio &zeta; — <span id="zVal" style="font-family:var(--mono);color:var(--accent)">0.30</span></label>
+      <input type="range" id="zeta" min="0.06" max="1.1" step="0.01" value="0.30">
+      <span class="hint" id="zHint">Underdamped: the finger overshoots and rings before settling.</span>
+    </div>
+  </div>
+
+  <div class="score" id="score" hidden>
+    <div class="ro"><b id="sCombo">0</b><span>Combo</span></div>
+    <div class="ro"><b id="sAcc">—</b><span>Accuracy</span></div>
+    <div class="ro"><b id="sPerf" class="g">0</b><span>Perfect</span></div>
+    <div class="ro"><b id="sMiss" class="r">0</b><span>Missed</span></div>
+  </div>
+
+  <details class="how">
+    <summary>How it finds the taps</summary>
+    <div class="how-body">
+      <p>No machine learning here, and you don't need any. A beat is an <em>onset</em>: a moment where energy in some frequency band jumps up fast. That's a signal-processing problem, and it's one you can solve exactly.</p>
+      <p>Every 10 ms the song is cut into a 1024-sample window, multiplied by a Hann window and run through an FFT. Take the magnitude spectrum, subtract the previous frame's, keep only the positive differences, and sum them inside a frequency band. That sum is the <code>spectral flux</code> of the band — it spikes when a drum lands in it.</p>
+      <p>Each band drives one finger, and each one gets its own adaptive threshold: a peak counts as a tap when it beats the local mean of the flux over a ±0.35 s window, multiplied by the sensitivity you set. Then a minimum gap per finger stops a single hit from registering twice.</p>
+      <table class="bands">
+        <thead><tr><th>Finger</th><th>Band</th><th>Usually</th></tr></thead>
+        <tbody>
+          <tr><td><span class="swatch" style="background:var(--c-0)"></span>Thumb</td><td>20–120 Hz</td><td>kick</td></tr>
+          <tr><td><span class="swatch" style="background:var(--c-1)"></span>Index</td><td>120–400 Hz</td><td>toms, bass</td></tr>
+          <tr><td><span class="swatch" style="background:var(--c-2)"></span>Middle</td><td>400–1200 Hz</td><td>snare body</td></tr>
+          <tr><td><span class="swatch" style="background:var(--c-3)"></span>Ring</td><td>1.2–3.5 kHz</td><td>snare crack, claps</td></tr>
+          <tr><td><span class="swatch" style="background:var(--c-4)"></span>Pinky</td><td>3.5–14 kHz</td><td>hi-hats, cymbals</td></tr>
+        </tbody>
+      </table>
+      <p>The tempo readout comes from autocorrelating the summed flux: the lag between 60 and 200 BPM that correlates best with itself is the beat period.</p>
+    </div>
+  </details>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
